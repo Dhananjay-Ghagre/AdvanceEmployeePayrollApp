@@ -1,31 +1,37 @@
 package com.example.EmployeePayrollApp.controller;
 
 import com.example.EmployeePayrollApp.dto.EmployeeDTO;
-import com.example.EmployeePayrollApp.entity.Employee;
 import com.example.EmployeePayrollApp.service.EmployeeService;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
 
-@Slf4j  //Enables logging
+@Slf4j
 @RestController
 @RequestMapping("/employees")
 public class EmployeeController {
 
-    @Autowired
-    private EmployeeService employeeService;
+    private final EmployeeService employeeService;
 
-    //Create Employee
+    public EmployeeController(EmployeeService employeeService) {
+        this.employeeService = employeeService;
+    }
+
+   //post mapping
     @PostMapping
-    public ResponseEntity<EmployeeDTO> createEmployee(@RequestBody EmployeeDTO employeeDTO) {
+    public ResponseEntity<EmployeeDTO> createEmployee(@Valid @RequestBody EmployeeDTO employeeDTO) {
         log.info("Received request to create employee: {}", employeeDTO);
-        EmployeeDTO savedEmployee = employeeService.saveEmployee(employeeDTO);
-        log.info("Employee created successfully with ID: {}", savedEmployee.getId());
-        return ResponseEntity.ok(savedEmployee);
+
+        EmployeeDTO savedEmployee = employeeService.createEmployee(employeeDTO);
+
+        log.info("Employee created successfully with ID {}: {}", savedEmployee.getId(), savedEmployee);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedEmployee);
     }
 
     // Get All Employees
@@ -39,42 +45,52 @@ public class EmployeeController {
 
     // Get Employee by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Optional<Employee>> getEmployeeById(@PathVariable Long id) {
+    public ResponseEntity<EmployeeDTO> getEmployeeById(@PathVariable Long id) {
         log.info("Fetching employee with ID: {}", id);
-        Optional<Employee> employee = employeeService.getEmployeeById(id);
-        if (employee.isPresent()) {
-            log.info("Employee found: {}", employee.get());
-            return ResponseEntity.ok(employee);
+        Optional<EmployeeDTO> employeeDTO = employeeService.getEmployeeById(id);
+
+        if (employeeDTO.isPresent()) {
+            log.info("Employee found: {}", employeeDTO.get());
+            return ResponseEntity.ok(employeeDTO.get());
         } else {
             log.warn("Employee with ID {} not found", id);
             return ResponseEntity.notFound().build();
         }
     }
 
-    //Update Employee
     @PutMapping("/{id}")
-    public ResponseEntity<Employee> updateEmployee(@PathVariable Long id, @RequestBody Employee employee) {
+    public ResponseEntity<EmployeeDTO> updateEmployee(@PathVariable Long id, @Valid @RequestBody EmployeeDTO employeeDTO) {
         log.info("Updating employee with ID: {}", id);
-        Employee updatedEmployee = employeeService.updateEmployee(id, employee);
-        if (updatedEmployee != null) {
+
+        try {
+            EmployeeDTO updatedEmployee = employeeService.updateEmployee(id, employeeDTO);
+
             log.info("Employee with ID {} updated successfully", id);
             return ResponseEntity.ok(updatedEmployee);
-        } else {
-            log.warn("Employee with ID {} not found for update", id);
-            return ResponseEntity.notFound().build();
+
+        } catch (ResponseStatusException e) {
+            log.error("Failed to update. Employee with ID {} not found: {}", id, e.getMessage());
+            return ResponseEntity.status(e.getStatusCode()).body(null);
+
+        } catch (Exception e) {
+            log.error("Unexpected error while updating employee with ID {}: {}", id, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
 
-    //Delete Employee
+
+
+    // Delete Employee
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteEmployee(@PathVariable Long id) {
-        log.info("Received request to delete employee with ID: {}", id);
+        log.info("Deleting employee with ID: {}", id);
         boolean deleted = employeeService.deleteEmployee(id);
+
         if (deleted) {
             log.info("Employee with ID {} deleted successfully", id);
             return ResponseEntity.noContent().build();
         } else {
-            log.warn("Employee with ID {} not found for deletion", id);
+            log.warn("Delete failed. Employee with ID {} not found", id);
             return ResponseEntity.notFound().build();
         }
     }
